@@ -41,7 +41,7 @@
     }
 
     /* ─── NAV ─── */
-    nav {
+    nav.site-nav {
       position: sticky; top: 0; z-index: 100;
       background: var(--aws-navy);
       padding: 0 40px;
@@ -51,8 +51,8 @@
     }
     .nav-logo { color: var(--aws-orange); font-weight: 700; font-size: 18px; text-decoration: none; letter-spacing: -.3px; }
     .nav-tag { color: #aaa; font-size: 13px; }
-    nav a.nav-link { color: #ccc; font-size: 13px; text-decoration: none; margin-left: auto; }
-    nav a.nav-link:hover { color: #fff; }
+    nav.site-nav a.nav-link { color: #ccc; font-size: 13px; text-decoration: none; margin-left: auto; }
+    nav.site-nav a.nav-link:hover { color: #fff; }
 
     /* ─── HERO ─── */
     .hero {
@@ -332,7 +332,7 @@
 <body>
 
 <!-- NAV -->
-<nav>
+<nav class="site-nav">
   <a class="nav-logo" href="#">re675 tech</a>
   <span class="nav-tag">Security Engineering</span>
   <a class="nav-link" href="https://github.com/re675" target="_blank">GitHub</a>
