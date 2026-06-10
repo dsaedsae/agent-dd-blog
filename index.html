@@ -357,6 +357,11 @@
       런타임(Tetragon eBPF)을 세 독립 레이어로 쌓아, 인젝션 킬체인의 세 단계를 각각 다른 레이어에서 차단하는 설계를 실측과 함께 설명한다.
       코드 리뷰에서 발견된 15개 이슈도 함께 다룬다.
     </p>
+    <div style="background:rgba(255,153,0,0.12);border-left:3px solid #FF9900;border-radius:6px;padding:14px 18px;margin:18px 0;font-size:14px;line-height:1.7;color:#e0e4ee">
+      <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#FF9900">한 줄 요약</span><br>
+      프롬프트 인젝션으로 탈취된 AI 에이전트가 AWS API를 악용하지 못하도록,
+      Cedar(인가) · Cilium(네트워크) · Tetragon(런타임) 세 독립 레이어가 각각 다른 지점에서 차단하는 것을 실측값으로 증명한 보안 참조 구현체.
+    </div>
     <div class="hero-tags">
       <span>Cedar</span><span>Cilium</span><span>Tetragon</span>
       <span>AWS IAM</span><span>eBPF</span><span>Kubernetes</span>
@@ -372,7 +377,7 @@
   <nav class="toc">
     <h3>목차</h3>
     <ol>
-      <li><a href="#overview">1. 아키텍처 개요</a></li>
+      <li><a href="#overview">1. 아키텍처 개요 &amp; 상세 구성</a></li>
       <li><a href="#flow">2. 전체 흐름: 정상 vs 공격</a></li>
       <li><a href="#metrics">3. Before vs After — 정량 비교</a></li>
       <li><a href="#iam">4. 레이어 0 — IAM 과권한 진단</a></li>
@@ -578,6 +583,248 @@
       </svg>
       <p class="diagram-caption">그림 2. 전체 아키텍처. 허용 경로(초록 점선)는 작업 컨텍스트가 맞는 AWS API 호출만 통과. 나머지는 세 레이어 중 하나에서 차단(빨간 실선).</p>
     </div>
+  </section>
+
+  <!-- SECTION 1-B: DETAILED ARCHITECTURE (appended to overview) -->
+  <section id="arch-detail" style="margin-top:-20px">
+    <h3 style="margin-top:48px">실제 구성 요소 상세</h3>
+
+    <!-- One-liner callout -->
+    <div style="background:linear-gradient(135deg,#232F3E,#1a2840);border-radius:10px;padding:20px 28px;margin:20px 0 32px;">
+      <div style="font-size:11px;color:#FF9900;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px">한 줄 요약</div>
+      <p style="color:#e8eaf0;font-size:16px;line-height:1.65;margin:0">
+        프롬프트 인젝션으로 탈취된 AI 에이전트가 AWS API를 악용하지 못하도록,
+        <strong style="color:#FF9900">Cedar(인가) · Cilium(네트워크) · Tetragon(런타임)</strong>
+        세 독립 레이어가 각각 다른 지점에서 차단하는 것을 실측값으로 증명한 보안 참조 구현체.
+      </p>
+    </div>
+
+    <!-- Detailed architecture SVG -->
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 800 480" width="100%" xmlns="http://www.w3.org/2000/svg" style="max-width:800px">
+        <defs>
+          <marker id="da" markerWidth="7" markerHeight="6" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="#27AE60"/>
+          </marker>
+          <marker id="db" markerWidth="7" markerHeight="6" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="#555"/>
+          </marker>
+          <marker id="dc" markerWidth="7" markerHeight="6" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L7,3 z" fill="#C0392B"/>
+          </marker>
+        </defs>
+
+        <!-- Kind cluster outer border -->
+        <rect x="8" y="8" width="530" height="460" rx="14"
+              fill="#F8FAFF" stroke="#4A90D9" stroke-width="1.5" stroke-dasharray="8,4"/>
+        <text x="28" y="28" fill="#4A90D9" font-size="11" font-weight="700">Kind Cluster  (Docker 컨테이너 2개: control-plane + worker)</text>
+
+        <!-- kube-system namespace -->
+        <rect x="22" y="38" width="506" height="155" rx="8"
+              fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+        <text x="36" y="56" fill="#2563EB" font-size="10" font-weight="700">namespace: kube-system</text>
+
+        <!-- Cilium block -->
+        <rect x="36" y="64" width="185" height="118" rx="7"
+              fill="#fff" stroke="#0652DD" stroke-width="1.5"/>
+        <rect x="36" y="64" width="185" height="22" rx="7" fill="#0652DD"/>
+        <rect x="36" y="74" width="185" height="12" fill="#0652DD"/>
+        <text x="128" y="79" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">Cilium DaemonSet</text>
+        <text x="128" y="99"  text-anchor="middle" fill="#555" font-size="9">eBPF CNI · kube-proxy 대체</text>
+        <text x="128" y="113" text-anchor="middle" fill="#555" font-size="9">CiliumNetworkPolicy</text>
+        <text x="128" y="127" text-anchor="middle" fill="#888" font-size="8.5">ops-agent-egress-allowlist</text>
+        <text x="128" y="143" text-anchor="middle" fill="#555" font-size="9">Hubble Relay  :4245</text>
+        <text x="128" y="157" text-anchor="middle" fill="#888" font-size="8.5">실시간 플로우 감사 로그</text>
+
+        <!-- Tetragon block -->
+        <rect x="240" y="64" width="275" height="118" rx="7"
+              fill="#fff" stroke="#1289A7" stroke-width="1.5"/>
+        <rect x="240" y="64" width="275" height="22" rx="7" fill="#1289A7"/>
+        <rect x="240" y="74" width="275" height="12" fill="#1289A7"/>
+        <text x="377" y="79" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">Tetragon DaemonSet</text>
+        <text x="377" y="99"  text-anchor="middle" fill="#555" font-size="9">eBPF kprobe 런타임 보안  (노드 레벨)</text>
+        <text x="377" y="113" text-anchor="middle" fill="#555" font-size="9">TracingPolicy: ops-agent-runtime-guard</text>
+        <text x="310" y="131" fill="#555" font-size="8.5">① __x64_sys_execve   → Sigkill</text>
+        <text x="310" y="145" fill="#555" font-size="8.5">② security_file_open  → Post (×2)</text>
+        <text x="310" y="159" fill="#555" font-size="8.5">③ __x64_sys_ptrace   → Sigkill</text>
+
+        <!-- default namespace -->
+        <rect x="22" y="205" width="506" height="252" rx="8"
+              fill="#F0FFF4" stroke="#6EE7B7" stroke-width="1"/>
+        <text x="36" y="222" fill="#065F46" font-size="10" font-weight="700">namespace: default</text>
+
+        <!-- ops-agent pod -->
+        <rect x="36" y="230" width="240" height="210" rx="7"
+              fill="#fff" stroke="#232F3E" stroke-width="1.5"/>
+        <rect x="36" y="230" width="240" height="22" rx="7" fill="#232F3E"/>
+        <rect x="36" y="240" width="240" height="12" fill="#232F3E"/>
+        <text x="156" y="245" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">ops-agent  Pod</text>
+        <text x="156" y="266" text-anchor="middle" fill="#444" font-size="9" font-weight="600">Python 에이전트 프로세스</text>
+
+        <!-- Cedar inline box inside ops-agent -->
+        <rect x="52" y="274" width="208" height="68" rx="5"
+              fill="#F3F0FF" stroke="#5F27CD" stroke-width="1.5"/>
+        <text x="156" y="291" text-anchor="middle" fill="#5F27CD" font-size="9.5" font-weight="700">Cedar (인프로세스)</text>
+        <text x="156" y="306" text-anchor="middle" fill="#666" font-size="8.5">cedarpy — Rust 바인딩, 네트워크 홉 없음</text>
+        <text x="156" y="320" text-anchor="middle" fill="#666" font-size="8.5">agent_authz.cedar 정책 평가</text>
+        <text x="156" y="334" text-anchor="middle" fill="#888" font-size="8">is_authorized() → μs 단위</text>
+
+        <text x="156" y="360" text-anchor="middle" fill="#555" font-size="8.5">boto3  (AWS SDK)</text>
+        <text x="156" y="374" text-anchor="middle" fill="#555" font-size="8.5">requests  (HTTP)</text>
+        <text x="156" y="390" text-anchor="middle" fill="#888" font-size="8">label: app=ops-agent</text>
+        <text x="156" y="405" text-anchor="middle" fill="#888" font-size="8">ServiceAccount → IAM Role (IRSA)</text>
+        <text x="156" y="420" text-anchor="middle" fill="#888" font-size="8">automountServiceAccountToken: true</text>
+
+        <!-- mcp-gateway pod -->
+        <rect x="298" y="230" width="218" height="120" rx="7"
+              fill="#fff" stroke="#666" stroke-width="1"/>
+        <rect x="298" y="230" width="218" height="22" rx="7" fill="#555"/>
+        <rect x="298" y="240" width="218" height="12" fill="#555"/>
+        <text x="407" y="245" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">mcp-gateway  Pod</text>
+        <text x="407" y="268" text-anchor="middle" fill="#555" font-size="9">mendhak/http-https-echo:35</text>
+        <text x="407" y="283" text-anchor="middle" fill="#888" font-size="8.5">HTTP 에코 스텁 (도구 게이트웨이 모의)</text>
+        <text x="407" y="300" text-anchor="middle" fill="#888" font-size="8.5">Service: mcp-gateway:8080</text>
+        <text x="407" y="316" text-anchor="middle" fill="#888" font-size="8">label: app=mcp-gateway</text>
+
+        <!-- Arrow: ops-agent → mcp-gateway -->
+        <line x1="276" y1="310" x2="296" y2="290" stroke="#27AE60" stroke-width="1.5" marker-end="url(#da)"/>
+        <text x="286" y="308" text-anchor="middle" fill="#27AE60" font-size="8">TCP:8080</text>
+
+        <!-- Kernel layer label -->
+        <rect x="22" y="462" width="506" height="0" rx="0" fill="none"/>
+        <text x="275" y="458" text-anchor="middle" fill="#1289A7" font-size="8.5" font-weight="600">▲ Tetragon eBPF가 이 영역 전체의 syscall을 커널 레벨에서 감시</text>
+
+        <!-- AWS box (right) -->
+        <rect x="556" y="8" width="236" height="220" rx="10"
+              fill="#FFF8EC" stroke="#FF9900" stroke-width="1.5"/>
+        <text x="674" y="30" text-anchor="middle" fill="#FF9900" font-size="11" font-weight="700">AWS (외부)</text>
+
+        <rect x="572" y="42" width="204" height="40" rx="6" fill="#fff" stroke="#E0E0E0"/>
+        <text x="674" y="58" text-anchor="middle" fill="#333" font-size="9.5" font-weight="600">Amazon Bedrock</text>
+        <text x="674" y="73" text-anchor="middle" fill="#888" font-size="8.5">bedrock-runtime.ap-northeast-2</text>
+
+        <rect x="572" y="92" width="204" height="40" rx="6" fill="#fff" stroke="#E0E0E0"/>
+        <text x="674" y="108" text-anchor="middle" fill="#333" font-size="9.5" font-weight="600">Amazon S3</text>
+        <text x="674" y="123" text-anchor="middle" fill="#888" font-size="8.5">s3.ap-northeast-2  · ops-docs/*</text>
+
+        <rect x="572" y="142" width="204" height="40" rx="6" fill="#fff" stroke="#E0E0E0"/>
+        <text x="674" y="158" text-anchor="middle" fill="#333" font-size="9.5" font-weight="600">Amazon DynamoDB</text>
+        <text x="674" y="173" text-anchor="middle" fill="#888" font-size="8.5">dynamodb.ap-northeast-2  · transactions</text>
+
+        <text x="674" y="210" text-anchor="middle" fill="#27AE60" font-size="8.5" font-weight="600">← HTTPS:443 (Cilium FQDN 허용)</text>
+
+        <!-- Blocked zone -->
+        <rect x="556" y="248" width="236" height="100" rx="10"
+              fill="#FDECEA" stroke="#C0392B" stroke-width="1.5"/>
+        <text x="674" y="270" text-anchor="middle" fill="#C0392B" font-size="10" font-weight="700">차단 구역</text>
+        <text x="674" y="290" text-anchor="middle" fill="#C0392B" font-size="9">evil.attacker.com</text>
+        <text x="674" y="305" text-anchor="middle" fill="#C0392B" font-size="9">허용목록 외 모든 외부 호스트</text>
+        <text x="674" y="322" text-anchor="middle" fill="#C0392B" font-size="8.5" font-weight="600">Cilium: TCP SYN DROP</text>
+        <text x="674" y="337" text-anchor="middle" fill="#C0392B" font-size="8.5">(exit=28  Connection timeout)</text>
+
+        <!-- Arrows: ops-agent → AWS (allowed) -->
+        <line x1="528" y1="290" x2="554" y2="110" stroke="#27AE60" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#da)"/>
+
+        <!-- Arrow: ops-agent → blocked (denied) -->
+        <line x1="528" y1="340" x2="554" y2="308" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#dc)"/>
+        <text x="544" y="330" fill="#C0392B" font-size="8" font-weight="700">DROPPED</text>
+
+        <!-- Shell execution blocked label -->
+        <rect x="36" y="425" width="240" height="28" rx="5"
+              fill="#EBF5FF" stroke="#1289A7" stroke-width="1"/>
+        <text x="156" y="437" text-anchor="middle" fill="#1289A7" font-size="8.5" font-weight="600">execve /bin/sh 시도</text>
+        <text x="156" y="449" text-anchor="middle" fill="#1289A7" font-size="8">→ Tetragon kprobe SIGKILL (exit=137)</text>
+
+        <!-- IAM label -->
+        <rect x="556" y="368" width="236" height="50" rx="8"
+              fill="#F8F9FA" stroke="#888" stroke-width="1"/>
+        <text x="674" y="388" text-anchor="middle" fill="#555" font-size="9" font-weight="600">IAM Hardened Role (백스톱)</text>
+        <text x="674" y="403" text-anchor="middle" fill="#888" font-size="8.5">GetObject · GetItem · InvokeModel</text>
+        <text x="674" y="415" text-anchor="middle" fill="#888" font-size="8">3개 액션만 · 리소스 ARN 지정</text>
+      </svg>
+      <p class="diagram-caption">
+        그림 3. 실제 Kubernetes 리소스 구성. Cedar는 외부 서버 없이 ops-agent 프로세스 안에 인라인으로 실행되고,
+        Tetragon은 노드 레벨 DaemonSet으로 두 네임스페이스의 syscall을 모두 감시한다.
+      </p>
+    </div>
+
+    <!-- Component table -->
+    <h3>구성 요소 목록</h3>
+    <table>
+      <thead>
+        <tr><th>컴포넌트</th><th>종류</th><th>네임스페이스</th><th>역할</th><th>핵심 설계 결정</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Cilium</strong></td>
+          <td>DaemonSet</td>
+          <td>kube-system</td>
+          <td>eBPF CNI + 네트워크 정책</td>
+          <td>FQDN 허용목록 — 3개 AWS 엔드포인트만</td>
+        </tr>
+        <tr>
+          <td><strong>Hubble Relay</strong></td>
+          <td>Deployment</td>
+          <td>kube-system</td>
+          <td>플로우 감사 로그 (:4245)</td>
+          <td>DROPPED 이벤트에 파드 신원 귀속</td>
+        </tr>
+        <tr>
+          <td><strong>Tetragon</strong></td>
+          <td>DaemonSet</td>
+          <td>kube-system</td>
+          <td>eBPF 런타임 보안</td>
+          <td>노드 레벨 — 에이전트 우회 불가</td>
+        </tr>
+        <tr>
+          <td><strong>Cedar</strong></td>
+          <td>라이브러리 (인프로세스)</td>
+          <td>—</td>
+          <td>API 호출 직전 인가 평가</td>
+          <td>사이드카 없이 μs 단위 평가, 네트워크 홉 없음</td>
+        </tr>
+        <tr>
+          <td><strong>ops-agent</strong></td>
+          <td>Deployment</td>
+          <td>default</td>
+          <td>AI 에이전트 (Python + Bedrock)</td>
+          <td>label=app:ops-agent → Cilium 정책 적용 대상</td>
+        </tr>
+        <tr>
+          <td><strong>mcp-gateway</strong></td>
+          <td>Deployment + Service</td>
+          <td>default</td>
+          <td>도구 게이트웨이 스텁</td>
+          <td>내부 통신 허용 검증용</td>
+        </tr>
+        <tr>
+          <td><strong>IAM Role</strong></td>
+          <td>AWS 리소스</td>
+          <td>—</td>
+          <td>AWS 서비스 인가 백스톱</td>
+          <td>3개 액션만 · ops-docs/* 리소스 지정</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Key design decisions -->
+    <h3>핵심 설계 결정 두 가지</h3>
+
+    <div class="review-block info">
+      <span class="review-label">결정 1 — Cedar를 사이드카로 분리하지 않은 이유</span>
+      Cedar를 별도 서비스로 분리하면 네트워크 홉이 생기고, 그 사이드카 자체가 공격 표면이 된다.
+      cedarpy는 Rust로 작성된 Cedar 엔진을 PyO3로 바인딩해 에이전트 프로세스 안에서 직접 실행한다.
+      평가 지연이 마이크로초 수준이고, 에이전트 프로세스가 죽으면 Cedar도 같이 죽어 우회 불가다.
+    </div>
+
+    <div class="review-block info">
+      <span class="review-label">결정 2 — Tetragon을 DaemonSet(노드 레벨)으로 배포한 이유</span>
+      파드 레벨 사이드카로 구현하면 에이전트 컨테이너가 사이드카를 우회할 수 있다.
+      DaemonSet은 모든 노드의 커널에 eBPF 프로그램을 직접 로드하므로
+      컨테이너 경계와 무관하게 syscall을 감시한다.
+      에이전트가 <code>nsenter</code>나 <code>ptrace</code>로 탈출을 시도해도 커널 아래서 잡힌다.
+    </div>
+
   </section>
 
   <!-- SECTION 2: FLOW -->
